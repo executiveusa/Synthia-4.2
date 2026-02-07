@@ -349,3 +349,20 @@ register_skill(Skill(
     tools_required=["canvas-gen", "animation-export"],
     approval_required=False,
 ))
+
+register_skill(Skill(
+    skill_id="awwwards-pattern-library",
+    display_name="Awwwards Pattern Library",
+    category=SkillCategory.DESIGN,
+    automation_level=AutomationLevel.FULL,
+    description="10 Awwwards-grade GSAP+React animation patterns with niche-aware recommendation engine. Clip-path hero reveals, bento tilt grids, text reveals, video transitions, scroll pins, parallax layers, magnetic buttons.",
+    when_to_use=[
+        "Client wants award-winning animations",
+        "Design hero sections with scroll-driven effects",
+        "Recommend patterns based on client niche",
+        "Build portfolio/agency/saas landing pages",
+        "Apply GSAP ScrollTrigger patterns",
+    ],
+    tools_required=["gsap", "tailwind", "react"],
+    approval_required=False,
+))

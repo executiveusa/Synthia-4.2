@@ -24,6 +24,25 @@ class LanguageCode(str, Enum):
     SERBIAN = "sr"
 
 
+class VoiceType(str, Enum):
+    """Voice type presets for /voice/synthesize endpoint."""
+    PAULI_DEFAULT = "pauli_default"  # Spanish voice - XB0fDUnXU5powFXDhCwa
+    PROFESSIONAL_FEMALE = "professional_female"  # Rachel
+    PROFESSIONAL_MALE = "professional_male"  # Josh
+    WARM_CONVERSATIONAL = "warm_conversational"  # Bella
+    ENERGETIC_MALE = "energetic_male"  # Antoni
+
+
+# Map VoiceType to LanguageCode for backward-compatible lookup
+VOICE_TYPE_LANGUAGE_MAP: Dict[VoiceType, LanguageCode] = {
+    VoiceType.PAULI_DEFAULT: LanguageCode.SPANISH,
+    VoiceType.PROFESSIONAL_FEMALE: LanguageCode.ENGLISH,
+    VoiceType.PROFESSIONAL_MALE: LanguageCode.SERBIAN,
+    VoiceType.WARM_CONVERSATIONAL: LanguageCode.HINDI,
+    VoiceType.ENERGETIC_MALE: LanguageCode.ENGLISH,
+}
+
+
 @dataclass
 class VoiceConfig:
     voice_id: str

@@ -250,6 +250,45 @@ def get_animation(key: str) -> Any:
     return DESIGN_TOKENS["animation"].get(key)
 
 
+# ─── GSAP / Awwwards Extended Tokens ──────────────────────────
+
+DESIGN_TOKENS["gsap_defaults"] = {
+    "scroll_trigger": {
+        "start": "top 80%",
+        "end": "bottom 20%",
+        "scrub": True,
+        "toggleActions": "play none none reverse",
+    },
+    "ease": {
+        "hero": "power1.inOut",
+        "text": "power2.inOut",
+        "button": "power1.out",
+        "parallax": "none",
+    },
+    "stagger": {
+        "text_char": 0.02,
+        "grid_item": 0.05,
+        "list_item": 0.1,
+    },
+}
+
+DESIGN_TOKENS["clip_paths"] = {
+    "hero_polygon": "polygon(14% 0, 72% 0, 88% 90%, 0 95%)",
+    "hero_full": "polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)",
+    "mask_reveal": "polygon(0 0, 100% 0, 100% 100%, 0 100%)",
+    "geometric_1": "polygon(25% 0%, 74% 0, 69% 64%, 34% 73%)",
+    "geometric_2": "polygon(29% 15%, 85% 30%, 50% 100%, 10% 64%)",
+}
+
+DESIGN_TOKENS["video_hero"] = {
+    "mini_preview_size": "size-64",
+    "transition_duration": 1,
+    "scale_in_duration": 1.5,
+    "border_radius": "rounded-lg",
+    "supported_formats": ["mp4", "webm"],
+}
+
+
 def get_tailwind_config() -> dict:
     """Generate a Tailwind CSS config extend object from design tokens."""
     tokens = DESIGN_TOKENS

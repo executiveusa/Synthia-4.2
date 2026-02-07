@@ -14,10 +14,13 @@ load_dotenv()
 
 # Import Synthia modules
 from api import skills_router
+from api.yappyverse import router as yappyverse_router
 from skills.registry import get_skill, list_skills
 from skills.workflows import get_workflow, list_workflows
 from skills.quality import validate_code, get_quality_summary
 from services import get_voice_service, VoiceType
+from services.voice import LanguageCode, VOICE_TYPE_LANGUAGE_MAP
+from api.orchestration import router as orchestration_router
 
 app = FastAPI(
     title="Synthia 4.2 - The Pauli Effect",
@@ -36,6 +39,8 @@ app.add_middleware(
 
 # Include routers
 app.include_router(skills_router)
+app.include_router(yappyverse_router)
+app.include_router(orchestration_router)
 
 # Models
 class VoiceSynthesizeRequest(BaseModel):
@@ -156,11 +161,15 @@ async def root():
         "languages": ["es", "en", "hi", "sr"],
         "capabilities": [
             "voice_collaboration",
+            "voice_calls_twilio",
             "code_generation",
             "frontend_design",
+            "awwwards_patterns",
             "skill_execution",
             "workflow_automation",
             "quality_validation",
+            "agent_orchestration",
+            "notification_whatsapp_telegram",
             "multilingual_communication"
         ],
         "endpoints": {
@@ -169,7 +178,11 @@ async def root():
             "workflows": "/skills/workflows/list",
             "generate": "/generate",
             "voice_synthesize": "/voice/synthesize",
-            "agent_query": "/agent/query"
+            "voice_call": "/voice/call",
+            "agent_query": "/agent/query",
+            "orchestration_start": "/orchestration/start",
+            "patterns_recommend": "/patterns/recommend",
+            "ws_jobs": "/ws/jobs"
         }
     }
 
@@ -255,7 +268,9 @@ async def voice_synthesize(request: VoiceSynthesizeRequest):
         }
         voice_type = voice_map.get(request.voice, VoiceType.PAULI_DEFAULT)
         
-        audio_data = await voice_service.synthesize(request.text, voice_type)
+        # Resolve VoiceType to LanguageCode for the synthesize call
+        lang = VOICE_TYPE_LANGUAGE_MAP.get(voice_type, LanguageCode.ENGLISH)
+        audio_data = await voice_service.synthesize(request.text, lang)
         
         return StreamingResponse(
             io.BytesIO(audio_data),
@@ -316,6 +331,74 @@ async def system_info():
             "available": [w.workflow_id for w in list_workflows()]
         }
     }
+
+# ═════════════════════════════════════════════════════════════════
+# Voice Call Endpoints (Twilio integration)
+# ═════════════════════════════════════════════════════════════════
+
+class VoiceCallRequest(BaseModel):
+    phone_number: str
+
+@app.post("/voice/call")
+async def initiate_voice_call(request: VoiceCallRequest):
+    """Initiate an outbound voice call to the client."""
+    try:
+        from services.twilio_service import get_twilio_service
+        twilio = get_twilio_service()
+        if not twilio.is_available:
+            raise HTTPException(status_code=503, detail="Twilio not configured")
+        call_sid = twilio.initiate_call(request.phone_number)
+        return {"status": "call_initiated", "call_sid": call_sid}
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/voice/call/status")
+async def voice_call_status(request: dict):
+    """Twilio call status webhook callback."""
+    return {"received": True, "status": request.get("CallStatus", "unknown")}
+
+
+# ═════════════════════════════════════════════════════════════════
+# WebSocket: Dashboard Job Status Stream
+# ═════════════════════════════════════════════════════════════════
+
+from fastapi import WebSocket, WebSocketDisconnect
+
+_dashboard_clients: list[WebSocket] = []
+
+@app.websocket("/ws/jobs")
+async def websocket_job_status(websocket: WebSocket):
+    """WebSocket endpoint for real-time job status updates."""
+    await websocket.accept()
+    _dashboard_clients.append(websocket)
+    try:
+        while True:
+            # Keep connection alive, listen for client messages
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        _dashboard_clients.remove(websocket)
+
+
+# ═════════════════════════════════════════════════════════════════
+# Awwwards Pattern Recommendation Endpoint
+# ═════════════════════════════════════════════════════════════════
+
+@app.get("/patterns/recommend")
+async def recommend_patterns(niche: str = "saas", page_type: str = "landing", limit: int = 5):
+    """Recommend Awwwards patterns for a given niche and page type."""
+    from skills.awwwards_patterns import recommend_patterns as _recommend
+    patterns = _recommend(niche, page_type, max_results=limit)
+    return {
+        "niche": niche,
+        "page_type": page_type,
+        "count": len(patterns),
+        "patterns": [p.to_dict() for p in patterns],
+    }
+
 
 if __name__ == "__main__":
     import uvicorn

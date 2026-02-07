@@ -159,6 +159,30 @@ def validate_code(code: str) -> list[dict]:
     else:
         results.append({"check": "anti-04", "status": "pass", "message": "Animation durations within budget"})
 
+    # ─── GSAP Quality Checks ───────────────────────────────────────
+    # GSAP-01: Must register ScrollTrigger plugin
+    if 'ScrollTrigger' in code and 'registerPlugin' not in code:
+        results.append({"check": "gsap-01", "status": "fail", "message": "ScrollTrigger used without gsap.registerPlugin(ScrollTrigger)"})
+    elif 'ScrollTrigger' in code:
+        results.append({"check": "gsap-01", "status": "pass", "message": "ScrollTrigger plugin registered"})
+
+    # GSAP-02: GSAP context cleanup
+    if 'useGSAP' not in code and 'gsap.context' not in code and ('gsap.to' in code or 'gsap.from' in code):
+        results.append({"check": "gsap-02", "status": "warn", "message": "GSAP animations without useGSAP hook or gsap.context - may cause memory leaks"})
+    elif 'useGSAP' in code or 'gsap.context' in code:
+        results.append({"check": "gsap-02", "status": "pass", "message": "GSAP context/cleanup present"})
+
+    # GSAP-03: will-change on animated elements
+    if ('gsap.to' in code or 'gsap.from' in code) and 'will-change' not in code:
+        results.append({"check": "gsap-03", "status": "warn", "message": "Animated elements should use will-change for GPU compositing"})
+
+    # GSAP-04: Never animate width/height/top/left
+    layout_anim = re.findall(r'gsap\.(?:to|from|fromTo)\([^)]*(?:width|height|top|left|right|bottom)\s*:', code)
+    if layout_anim:
+        results.append({"check": "gsap-04", "status": "fail", "message": "Animating layout properties (width/height/top/left) causes reflow - use transform instead"})
+    else:
+        results.append({"check": "gsap-04", "status": "pass", "message": "No layout property animations detected"})
+
     return results
 
 

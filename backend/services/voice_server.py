@@ -188,6 +188,81 @@ async def voice_websocket(websocket: WebSocket):
         print(f"Error in Synthia voice websocket: {e}")
         await websocket.close()
 
+# ═══════════════════════════════════════════════════════════════
+# Twilio Media Stream WebSocket
+# ═══════════════════════════════════════════════════════════════
+
+@app.websocket("/ws/twilio-stream")
+async def twilio_media_stream(websocket: WebSocket):
+    """
+    Handle Twilio Media Stream for real-time voice calls.
+    Receives mulaw/8000 audio from Twilio, processes through
+    VoiceCallManager, sends response audio back.
+    """
+    await websocket.accept()
+    print("Twilio media stream connected")
+
+    from services.voice_call import VoiceCallManager
+    manager = VoiceCallManager()
+    stream_sid = ""
+
+    try:
+        # Send greeting on connect
+        greeting_audio = await manager.on_connect()
+        if greeting_audio:
+            import base64
+            await websocket.send_json({
+                "event": "media",
+                "streamSid": stream_sid,
+                "media": {
+                    "payload": base64.b64encode(greeting_audio).decode()
+                }
+            })
+
+        while True:
+            data = await websocket.receive_json()
+            event = data.get("event", "")
+
+            if event == "start":
+                stream_sid = data.get("start", {}).get("streamSid", "")
+                manager.call_sid = data.get("start", {}).get("callSid", "")
+                print(f"Twilio stream started: {stream_sid}")
+
+            elif event == "media":
+                import base64
+                payload = data.get("media", {}).get("payload", "")
+                audio_bytes = base64.b64decode(payload)
+
+                # Process audio through VoiceCallManager
+                response_audio = await manager.on_audio_received(audio_bytes)
+                if response_audio:
+                    await websocket.send_json({
+                        "event": "media",
+                        "streamSid": stream_sid,
+                        "media": {
+                            "payload": base64.b64encode(response_audio).decode()
+                        }
+                    })
+
+            elif event == "stop":
+                print(f"Twilio stream stopped: {stream_sid}")
+                job_id = await manager.on_hangup()
+                if job_id:
+                    await websocket.send_json({
+                        "event": "synthia_pipeline_started",
+                        "job_id": job_id,
+                    })
+                break
+
+    except WebSocketDisconnect:
+        print("Twilio stream disconnected")
+        await manager.on_hangup()
+    except Exception as e:
+        print(f"Error in Twilio stream: {e}")
+        await manager.on_hangup()
+        await websocket.close()
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8002)

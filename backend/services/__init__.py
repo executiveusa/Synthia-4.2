@@ -1,6 +1,9 @@
 """Synthia services package - The Pauli Effect."""
 
-from .voice import VoiceService, LanguageCode, get_voice_service
+from .voice import VoiceService, LanguageCode, VoiceType, get_voice_service
+from .twilio_service import TwilioService, get_twilio_service
+from .notifications import NotificationService, get_notification_service
+from .dashboard_sync import DashboardSync, get_dashboard_sync
 from .media_generation import (
     MediaGenerationService,
     ImageProvider,
@@ -30,7 +33,17 @@ __all__ = [
     # Voice
     "VoiceService",
     "LanguageCode",
+    "VoiceType",
     "get_voice_service",
+    # Twilio
+    "TwilioService",
+    "get_twilio_service",
+    # Notifications
+    "NotificationService",
+    "get_notification_service",
+    # Dashboard Sync
+    "DashboardSync",
+    "get_dashboard_sync",
     # Media Generation
     "MediaGenerationService",
     "ImageProvider",

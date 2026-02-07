@@ -168,11 +168,34 @@ services:
       - ./backend:/app
       - ./celery-schedule:/app/celery-schedule
     depends_on:
-      - synthia
+      - backend
       - redis
     networks:
       - synthia-network
     command: celery -A tasks.celery_app beat --loglevel=info
+
+  # ─── Puppeteer Browser Automation ─────────────────────────────
+  puppeteer:
+    image: ghcr.io/puppeteer/puppeteer:latest
+    container_name: synthia-puppeteer
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+      - YAPPYVERSE_ADMIN_URL=${YAPPYVERSE_ADMIN_URL}
+      - YAPPYVERSE_ADMIN_EMAIL=${YAPPYVERSE_ADMIN_EMAIL}
+      - YAPPYVERSE_ADMIN_PASSWORD=${YAPPYVERSE_ADMIN_PASSWORD}
+    volumes:
+      - ./yappyverse_automation.js:/app/automation.js
+      - ./content:/app/content
+      - ./screenshots:/app/screenshots
+    networks:
+      - synthia-network
+    command: node /app/automation.js
+    cap_add:
+      - SYS_ADMIN
+    shm_size: '2gb'
 
 volumes:
   ollama-data:
