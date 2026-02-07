@@ -8,6 +8,7 @@ __pycache__/
 .env.local
 .venv/
 venv/
+master.env
 
 # Build output
 dist/
@@ -24,3 +25,9 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Unrelated projects
+StoryToolkitAI-main/
+
+# Training data (large files)
+training/

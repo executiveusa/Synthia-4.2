@@ -1,11 +1,29 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from typing import Optional, List
 import ollama
 import io
 from PIL import Image
+import os
+from dotenv import load_dotenv
 
-app = FastAPI(title="OpenKombai API", description="Local AI Backend for Frontend Generation")
+# Load environment variables
+load_dotenv()
+
+# Import Synthia modules
+from api import skills_router
+from skills.registry import get_skill, list_skills
+from skills.workflows import get_workflow, list_workflows
+from skills.quality import validate_code, get_quality_summary
+from services import get_voice_service, VoiceType
+
+app = FastAPI(
+    title="Synthia 4.2 - The Pauli Effect",
+    description="Synthia: AI Agent for The Pauli Effect. Manages coding and frontend design.",
+    version="4.2.0"
+)
 
 # CORS Setup
 app.add_middleware(
@@ -16,13 +34,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include routers
+app.include_router(skills_router)
+
+# Models
+class VoiceSynthesizeRequest(BaseModel):
+    text: str
+    voice: str = "pauli_default"
+
+class AgentQueryRequest(BaseModel):
+    query: str
+    skill_id: Optional[str] = None
+    context: Optional[dict] = None
+
 class GenerateResponse(BaseModel):
     code: str
     description: str
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "service": "OpenKombai Backend"}
+    return {"status": "ok", "service": "Synthia 4.2 Backend"}
 
 @app.post("/generate", response_model=GenerateResponse)
 async def generate_code(
@@ -107,6 +138,184 @@ async def generate_code(
     except Exception as e:
         print(f"❌ Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ═════════════════════════════════════════════════════════════════
+# Synthia/Pauli Agent Endpoints
+# ═════════════════════════════════════════════════════════════════
+
+@app.get("/")
+async def root():
+    """Root endpoint with system info."""
+    return {
+        "name": "Synthia",
+        "version": "4.2.0",
+        "status": "operational",
+        "agent_name": "Synthia",
+        "organization": "The Pauli Effect",
+        "role": "Coding and Frontend Design Lead",
+        "languages": ["es", "en", "hi", "sr"],
+        "capabilities": [
+            "voice_collaboration",
+            "code_generation",
+            "frontend_design",
+            "skill_execution",
+            "workflow_automation",
+            "quality_validation",
+            "multilingual_communication"
+        ],
+        "endpoints": {
+            "health": "/health",
+            "skills": "/skills/list",
+            "workflows": "/skills/workflows/list",
+            "generate": "/generate",
+            "voice_synthesize": "/voice/synthesize",
+            "agent_query": "/agent/query"
+        }
+    }
+
+@app.post("/agent/query")
+async def agent_query(request: AgentQueryRequest):
+    """
+    Main Pauli agent query endpoint.
+    Processes natural language requests and routes to appropriate skills.
+    """
+    try:
+        # If skill_id specified, use that skill
+        if request.skill_id:
+            skill = get_skill(request.skill_id)
+            if not skill:
+                raise HTTPException(status_code=404, detail=f"Skill '{request.skill_id}' not found")
+            
+            return {
+                "status": "success",
+                "skill_used": skill.skill_id,
+                "response": f"Executing {skill.display_name} skill for: {request.query}",
+                "automation_level": skill.automation_level.value,
+                "approval_required": skill.approval_required
+            }
+        
+        # Otherwise, use intent recognition to route
+        # In production, this would use Claude/OpenAI to determine intent
+        query_lower = request.query.lower()
+        
+        # Simple keyword routing (replace with proper intent classification)
+        if any(word in query_lower for word in ["design", "ui", "ux", "wireframe", "mockup"]):
+            skill = get_skill("ui-ux-design-master")
+        elif any(word in query_lower for word in ["code", "build", "create", "component", "page"]):
+            skill = get_skill("web-artifacts-builder-plus")
+        elif any(word in query_lower for word in ["deploy", "host", "server", "vercel", "coolify"]):
+            skill = get_skill("deployment-devops-orchestrator")
+        elif any(word in query_lower for word in ["market", "campaign", "social", "email", "ads"]):
+            skill = get_skill("marketing-growth-engine")
+        elif any(word in query_lower for word in ["voice", "speak", "audio", "sound"]):
+            return {
+                "status": "success",
+                "skill_used": "voice_collaboration",
+                "response": "I can help with voice synthesis. Use /voice/synthesize endpoint.",
+                "automation_level": "full",
+                "approval_required": False
+            }
+        else:
+            # Default to general conversation
+            return {
+                "status": "success",
+                "skill_used": None,
+                "response": f"¡Hola!我是 Synthia from The Pauli Effect. I received your query: '{request.query}'. I can help with coding, frontend design, and creative projects in Spanish, English, Hindi, or Serbian.",
+                "automation_level": "human",
+                "approval_required": False,
+                "suggested_skills": [s.skill_id for s in list_skills()[:5]]
+            }
+        
+        return {
+            "status": "success",
+            "skill_used": skill.skill_id,
+            "response": f"I'll use the {skill.display_name} skill to help with: {request.query}",
+            "automation_level": skill.automation_level.value,
+            "approval_required": skill.approval_required,
+            "skill_description": skill.description,
+            "when_to_use": skill.when_to_use[:3]
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/voice/synthesize")
+async def voice_synthesize(request: VoiceSynthesizeRequest):
+    """Synthesize text to speech using Pauli's voice."""
+    try:
+        voice_service = get_voice_service()
+        
+        # Map voice string to VoiceType
+        voice_map = {
+            "pauli_default": VoiceType.PAULI_DEFAULT,
+            "professional_female": VoiceType.PROFESSIONAL_FEMALE,
+            "professional_male": VoiceType.PROFESSIONAL_MALE,
+            "warm": VoiceType.WARM_CONVERSATIONAL,
+            "energetic": VoiceType.ENERGETIC_MALE,
+        }
+        voice_type = voice_map.get(request.voice, VoiceType.PAULI_DEFAULT)
+        
+        audio_data = await voice_service.synthesize(request.text, voice_type)
+        
+        return StreamingResponse(
+            io.BytesIO(audio_data),
+            media_type="audio/mpeg",
+            headers={"Content-Disposition": "attachment; filename=pauli_speech.mp3"}
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/training/dataset")
+async def get_training_dataset():
+    """Get Synthia training dataset info."""
+    training_path = "training/synthia_training_dataset.jsonl"
+    
+    if not os.path.exists(training_path):
+        return {
+            "status": "not_found",
+            "message": "Training dataset not found",
+            "path": training_path
+        }
+    
+    # Count lines in file
+    with open(training_path, 'r', encoding='utf-8') as f:
+        line_count = sum(1 for _ in f)
+    
+    return {
+        "status": "available",
+        "path": training_path,
+        "examples": line_count,
+        "format": "JSONL (OpenAI fine-tuning format)",
+        "description": "Conversational training data for Synthia/Pauli agent fine-tuning"
+    }
+
+@app.get("/system/info")
+async def system_info():
+    """Get system configuration and status."""
+    return {
+        "agent": {
+            "name": os.getenv("AGENT_NAME", "Pauli"),
+            "version": "4.2.0",
+            "voice_enabled": os.getenv("ENABLE_VOICE_COLLABORATION", "true").lower() == "true",
+            "default_voice": os.getenv("DEFAULT_VOICE_TYPE", "pauli_default"),
+        },
+        "features": {
+            "awwwards_scraping": os.getenv("ENABLE_AWWWARDS_SCRAPING", "true").lower() == "true",
+            "agent_lightning": os.getenv("ENABLE_AGENT_LIGHTNING", "true").lower() == "true",
+            "auto_deployment": os.getenv("ENABLE_AUTO_DEPLOYMENT", "false").lower() == "true",
+            "mcp_tools": os.getenv("ENABLE_MCP_TOOLS", "true").lower() == "true",
+        },
+        "skills": {
+            "total": len(list_skills()),
+            "categories": list(set(s.category.value for s in list_skills()))
+        },
+        "workflows": {
+            "total": len(list_workflows()),
+            "available": [w.workflow_id for w in list_workflows()]
+        }
+    }
 
 if __name__ == "__main__":
     import uvicorn

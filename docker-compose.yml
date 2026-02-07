@@ -1,23 +1,183 @@
 version: '3.8'
 
 services:
-  backend:
+  # ─── Synthia Backend - The Pauli Effect ──────────────────────
+  synthia:
     build: ./backend
+    container_name: synthia-agent
+    restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
-      - OLLAMA_HOST=http://host.docker.internal:11434
+      - OLLAMA_HOST=http://ollama:11434
+      - REDIS_URL=redis://redis:6379/0
+    env_file:
+      - .env
     volumes:
       - ./backend:/app
+      - ./skills:/app/skills
+      - ./design-system:/app/design-system
+      - ./.mcp-agent-mail:/app/.mcp-agent-mail
+      - ./.beads:/app/.beads
+      - ./training:/app/training
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      - ollama
+      - redis
+    networks:
+      - synthia-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
-  frontend:
+  # ─── Frontend Dashboard ──────────────────────────────────────
+  dashboard:
     build: ./frontend
+    container_name: synthia-dashboard
+    restart: unless-stopped
     ports:
       - "5173:5173"
+    env_file:
+      - .env
     volumes:
       - ./frontend:/app
       - /app/node_modules
     stdin_open: true
     tty: true
+    depends_on:
+      - synthia
+    networks:
+      - synthia-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5173"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ─── Synthia Voice Service ───────────────────────────────────
+  voice:
+    build: ./backend
+    container_name: synthia-voice
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    environment:
+      - SERVICE_MODE=voice
+      - REDIS_URL=redis://redis:6379/0
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+      - ./training:/app/training
+    depends_on:
+      - synthia
+      - redis
+    networks:
+      - synthia-network
+    command: uvicorn services.voice_server:app --host 0.0.0.0 --port 8002 --reload
+
+  # ─── Agent Lightning - Learning & Monitoring ──────────────────
+  agent-lightning:
+    build: ./agent-lightning
+    container_name: synthia-agent-lightning
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      - BACKEND_URL=http://synthia:8000
+      - REDIS_URL=redis://redis:6379/0
+    env_file:
+      - .env
+    volumes:
+      - ./agent-lightning:/app
+      - ./learning-reports:/app/reports
+      - ./training:/app/training
+    depends_on:
+      - synthia
+      - redis
+    networks:
+      - synthia-network
+
+  # ─── Ollama Local LLM Service ─────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: synthia-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - synthia-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # ─── Redis for Caching & Task Queue ───────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: synthia-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - synthia-network
+    command: redis-server --appendonly yes
+
+  # ─── Celery Worker for Async Tasks ────────────────────────────
+  celery-worker:
+    build: ./backend
+    container_name: synthia-celery
+    restart: unless-stopped
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+      - ./skills:/app/skills
+    depends_on:
+      - synthia
+      - redis
+    networks:
+      - synthia-network
+    command: celery -A tasks.celery_app worker --loglevel=info
+
+  # ─── Celery Beat for Scheduled Tasks ──────────────────────────
+  celery-beat:
+    build: ./backend
+    container_name: synthia-celery-beat
+    restart: unless-stopped
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+      - ./celery-schedule:/app/celery-schedule
+    depends_on:
+      - synthia
+      - redis
+    networks:
+      - synthia-network
+    command: celery -A tasks.celery_app beat --loglevel=info
+
+volumes:
+  ollama-data:
+  redis-data:
+
+networks:
+  synthia-network:
+    driver: bridge

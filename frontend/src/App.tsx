@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import Editor from '@monaco-editor/react';
-import { Upload, Code, Play, CheckCircle, AlertCircle, Loader2, Settings } from 'lucide-react';
+import { Upload, Code, Play, CheckCircle, AlertCircle, Loader2, Settings, Zap } from 'lucide-react';
 import axios from 'axios';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { SettingsModal } from './components/SettingsModal';
+import { SkillsDashboard } from './components/SkillsDashboard';
 
 export function cn(...inputs: (string | undefined)[]) {
   return twMerge(clsx(inputs));
@@ -19,6 +20,7 @@ function App() {
 
   // Model Settings State
   const [showSettings, setShowSettings] = useState(false);
+  const [showSkills, setShowSkills] = useState(false);
   const [visionModel, setVisionModel] = useState('llama3.2-vision');
   const [codeModel, setCodeModel] = useState('qwen2.5-coder');
 
@@ -64,20 +66,26 @@ function App() {
       {/* Header */}
       <header className="border-b border-neutral-800 p-4 flex items-center justify-between bg-neutral-900">
         <div className="flex items-center gap-2">
-          <div className="bg-blue-600 p-2 rounded-lg">
+          <div className="bg-pink-600 p-2 rounded-lg">
             <Code size={20} className="text-white" />
           </div>
-          <h1 className="text-xl font-bold tracking-tight">OpenKombai</h1>
-          <span className="text-xs bg-neutral-800 text-neutral-400 px-2 py-0.5 rounded ml-2">v0.1.0-alpha</span>
+          <h1 className="text-xl font-bold tracking-tight">Synthia</h1>
+          <span className="text-xs bg-neutral-800 text-neutral-400 px-2 py-0.5 rounded ml-2">v4.2.0</span>
         </div>
         <div className="flex gap-2">
           <button
+            onClick={() => setShowSkills(true)}
+            className="text-sm text-neutral-400 hover:text-white transition-colors flex items-center gap-1 cursor-pointer"
+          >
+            <Zap size={16} /> Skills
+          </button>
+          <button
             onClick={() => setShowSettings(true)}
-            className="text-sm text-neutral-400 hover:text-white transition-colors flex items-center gap-1"
+            className="text-sm text-neutral-400 hover:text-white transition-colors flex items-center gap-1 cursor-pointer"
           >
             <Settings size={16} /> Settings
           </button>
-          <a href="https://github.com/yourusername/open-kombai" target="_blank" className="text-sm text-neutral-400 hover:text-white transition-colors">GitHub</a>
+          <a href="https://github.com/executiveusa/Synthia-4.2" target="_blank" className="text-sm text-neutral-400 hover:text-white transition-colors">GitHub</a>
         </div>
       </header>
 
@@ -93,11 +101,11 @@ function App() {
               Upload a screenshot of the UI you want to clone.
             </p>
 
-            <label className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed border-neutral-700 rounded-xl cursor-pointer hover:border-blue-500 hover:bg-blue-500/5 transition-all group overflow-hidden relative">
+            <label className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed border-neutral-700 rounded-xl cursor-pointer hover:border-pink-500 hover:bg-pink-500/5 transition-all group overflow-hidden relative">
               {previewUrl ? (
                 <img src={previewUrl} alt="Preview" className="w-full h-full object-contain" />
               ) : (
-                <div className="flex flex-col items-center justify-center pt-5 pb-6 text-neutral-500 group-hover:text-blue-400">
+                <div className="flex flex-col items-center justify-center pt-5 pb-6 text-neutral-500 group-hover:text-pink-400">
                   <Upload className="w-10 h-10 mb-3" />
                   <p className="mb-2 text-sm"><span className="font-semibold">Click to upload</span> or drag and drop</p>
                   <p className="text-xs">PNG, JPG or WEBP</p>
@@ -111,16 +119,16 @@ function App() {
             onClick={handleGenerate}
             disabled={!image || loading}
             className={cn(
-              "w-full py-4 rounded-xl font-semibold text-lg flex items-center justify-center gap-2 transition-all",
+              "w-full py-4 rounded-xl font-semibold text-lg flex items-center justify-center gap-2 transition-all cursor-pointer",
               !image ? "bg-neutral-800 text-neutral-500 cursor-not-allowed" :
-                loading ? "bg-blue-600/50 text-blue-200 cursor-wait" :
-                  "bg-blue-600 hover:bg-blue-500 text-white shadow-lg hover:shadow-blue-500/20"
+                loading ? "bg-pink-600/50 text-pink-200 cursor-wait" :
+                  "bg-pink-600 hover:bg-pink-500 text-white shadow-lg hover:shadow-pink-500/20"
             )}
           >
             {loading ? (
               <><Loader2 className="animate-spin" /> Generating Code...</>
             ) : (
-              <><Play size={20} /> Generate React Code</>
+              <><Play size={20} /> Generate Component</>
             )}
           </button>
 
@@ -128,11 +136,11 @@ function App() {
             <div className="flex flex-col gap-1 w-full">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-neutral-400">Vision Model</span>
-                <span className="text-xs text-blue-400">{visionModel}</span>
+                <span className="text-xs text-pink-400">{visionModel}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-neutral-400">Code Model</span>
-                <span className="text-xs text-blue-400">{codeModel}</span>
+                <span className="text-xs text-pink-400">{codeModel}</span>
               </div>
               <button
                 onClick={() => setShowSettings(true)}
@@ -151,7 +159,7 @@ function App() {
           )}
 
           <div className="mt-auto text-xs text-neutral-500">
-            Powered by Local LLMs (Ollama). No data leaves your device.
+            Powered by Synthia 4.2 / Pauli Agent. Local LLMs via Ollama. No data leaves your device.
           </div>
         </div>
 
@@ -192,6 +200,11 @@ function App() {
         setVisionModel={setVisionModel}
         codeModel={codeModel}
         setCodeModel={setCodeModel}
+      />
+
+      <SkillsDashboard
+        isOpen={showSkills}
+        onClose={() => setShowSkills(false)}
       />
     </div>
   );

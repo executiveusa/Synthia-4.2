@@ -47,7 +47,7 @@ export function SettingsModal({
                                 className={cn(
                                     "p-3 rounded-xl border text-left transition-all",
                                     visionModel === 'llama3.2-vision'
-                                        ? "bg-blue-600/10 border-blue-600/50 text-blue-100"
+                                        ? "bg-pink-600/10 border-pink-600/50 text-pink-100"
                                         : "bg-neutral-800 border-neutral-700 text-neutral-400 hover:bg-neutral-800/80"
                                 )}
                             >
@@ -60,7 +60,7 @@ export function SettingsModal({
                                 className={cn(
                                     "p-3 rounded-xl border text-left transition-all",
                                     visionModel === 'moondream'
-                                        ? "bg-blue-600/10 border-blue-600/50 text-blue-100"
+                                        ? "bg-pink-600/10 border-pink-600/50 text-pink-100"
                                         : "bg-neutral-800 border-neutral-700 text-neutral-400 hover:bg-neutral-800/80"
                                 )}
                             >
@@ -81,7 +81,7 @@ export function SettingsModal({
                                 className={cn(
                                     "p-3 rounded-xl border text-left transition-all",
                                     codeModel === 'qwen2.5-coder'
-                                        ? "bg-blue-600/10 border-blue-600/50 text-blue-100"
+                                        ? "bg-pink-600/10 border-pink-600/50 text-pink-100"
                                         : "bg-neutral-800 border-neutral-700 text-neutral-400 hover:bg-neutral-800/80"
                                 )}
                             >
@@ -94,7 +94,7 @@ export function SettingsModal({
                                 className={cn(
                                     "p-3 rounded-xl border text-left transition-all",
                                     codeModel === 'qwen2.5-coder:1.5b'
-                                        ? "bg-blue-600/10 border-blue-600/50 text-blue-100"
+                                        ? "bg-pink-600/10 border-pink-600/50 text-pink-100"
                                         : "bg-neutral-800 border-neutral-700 text-neutral-400 hover:bg-neutral-800/80"
                                 )}
                             >
