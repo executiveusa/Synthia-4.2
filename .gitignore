@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+
+# Environment
+.env
+.env.local
+.venv/
+venv/
+
+# Build output
+dist/
+build/
+*.vsix
+
+# IDE
+.vscode/
+.idea/
+
+# Agent
+.agent/rules
+
+# OS
+.DS_Store
+Thumbs.db
