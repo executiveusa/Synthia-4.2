@@ -11,6 +11,16 @@ Languages supported:
 - Serbian (sr) - European market
 """
 
+import os
+from pathlib import Path
+
+# Load environment variables before anything else
+from dotenv import load_dotenv
+_backend_dir = Path(__file__).resolve().parent.parent
+_project_dir = _backend_dir.parent
+load_dotenv(_project_dir / ".env")
+load_dotenv(_project_dir / "master.env", override=True)
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -189,76 +199,115 @@ async def voice_websocket(websocket: WebSocket):
         await websocket.close()
 
 # ═══════════════════════════════════════════════════════════════
-# Twilio Media Stream WebSocket
+# Twilio Media Stream WebSocket (Production Pipeline)
 # ═══════════════════════════════════════════════════════════════
 
 @app.websocket("/ws/twilio-stream")
 async def twilio_media_stream(websocket: WebSocket):
     """
-    Handle Twilio Media Stream for real-time voice calls.
-    Receives mulaw/8000 audio from Twilio, processes through
-    VoiceCallManager, sends response audio back.
+    Handle Twilio Bidirectional Media Stream for real-time voice calls.
+
+    Protocol (from Twilio docs):
+    - Twilio sends: start, media (mulaw/8kHz base64), stop, mark, dtmf
+    - We send back: media (mulaw/8kHz base64), mark, clear
+
+    Audio pipeline:
+    - Inbound:  base64 → mulaw → AudioBuffer(VAD) → WAV/16kHz → Whisper
+    - Outbound: ElevenLabs mp3 → mulaw → 640-byte chunks → base64 → Twilio
     """
     await websocket.accept()
-    print("Twilio media stream connected")
+    print("✅ Twilio media stream connected")
 
     from services.voice_call import VoiceCallManager
+    from services.audio_utils import (
+        create_media_message,
+        create_mark_message,
+        create_clear_message,
+    )
+    import base64
+
     manager = VoiceCallManager()
     stream_sid = ""
 
     try:
-        # Send greeting on connect
-        greeting_audio = await manager.on_connect()
-        if greeting_audio:
-            import base64
-            await websocket.send_json({
-                "event": "media",
-                "streamSid": stream_sid,
-                "media": {
-                    "payload": base64.b64encode(greeting_audio).decode()
-                }
-            })
-
         while True:
             data = await websocket.receive_json()
             event = data.get("event", "")
 
             if event == "start":
-                stream_sid = data.get("start", {}).get("streamSid", "")
-                manager.call_sid = data.get("start", {}).get("callSid", "")
-                print(f"Twilio stream started: {stream_sid}")
+                start_data = data.get("start", {})
+                stream_sid = start_data.get("streamSid", "")
+                call_sid = start_data.get("callSid", "")
+                # Extract caller number from customParameters or start data
+                custom = start_data.get("customParameters", {})
+                caller_number = custom.get("callerNumber", "")
+                if not caller_number:
+                    # Try to get from the call metadata
+                    caller_number = custom.get("from", "")
+
+                manager.call_sid = call_sid
+                manager.stream_sid = stream_sid
+                manager.caller_number = caller_number
+                print(f"📞 Twilio stream started: {stream_sid} (call: {call_sid}, caller: {caller_number})")
+
+                # Send greeting audio
+                greeting_chunks = await manager.on_connect()
+                for chunk in greeting_chunks:
+                    msg = create_media_message(stream_sid, chunk)
+                    await websocket.send_json(msg)
+
+                # Mark end of greeting so we know when playback finishes
+                if greeting_chunks:
+                    mark_msg = create_mark_message(stream_sid, "greeting_end")
+                    await websocket.send_json(mark_msg)
 
             elif event == "media":
-                import base64
                 payload = data.get("media", {}).get("payload", "")
-                audio_bytes = base64.b64decode(payload)
+                mulaw_chunk = base64.b64decode(payload)
 
-                # Process audio through VoiceCallManager
-                response_audio = await manager.on_audio_received(audio_bytes)
-                if response_audio:
-                    await websocket.send_json({
-                        "event": "media",
-                        "streamSid": stream_sid,
-                        "media": {
-                            "payload": base64.b64encode(response_audio).decode()
-                        }
-                    })
+                # Feed 20ms chunk into VoiceCallManager (AudioBuffer + VAD)
+                response_chunks = await manager.on_mulaw_chunk(mulaw_chunk)
+
+                if response_chunks:
+                    # Clear any queued audio first (interruption handling)
+                    clear_msg = create_clear_message(stream_sid)
+                    await websocket.send_json(clear_msg)
+
+                    # Send all response chunks
+                    for chunk in response_chunks:
+                        msg = create_media_message(stream_sid, chunk)
+                        await websocket.send_json(msg)
+
+                    # Send mark to track end of response playback
+                    manager._mark_counter += 0  # counter already incremented in _process_utterance
+                    mark_msg = create_mark_message(
+                        stream_sid,
+                        f"response_{manager._mark_counter}"
+                    )
+                    await websocket.send_json(mark_msg)
+
+            elif event == "mark":
+                mark_name = data.get("mark", {}).get("name", "")
+                manager.on_mark_received(mark_name)
+
+            elif event == "dtmf":
+                digit = data.get("dtmf", {}).get("digit", "")
+                print(f"🔢 DTMF received: {digit}")
 
             elif event == "stop":
-                print(f"Twilio stream stopped: {stream_sid}")
+                print(f"📴 Twilio stream stopped: {stream_sid}")
                 job_id = await manager.on_hangup()
                 if job_id:
-                    await websocket.send_json({
-                        "event": "synthia_pipeline_started",
-                        "job_id": job_id,
-                    })
+                    print(f"🚀 Agent pipeline dispatched: {job_id}")
                 break
 
     except WebSocketDisconnect:
-        print("Twilio stream disconnected")
+        print("📴 Twilio stream disconnected")
         await manager.on_hangup()
     except Exception as e:
-        print(f"Error in Twilio stream: {e}")
+        print(f"❌ Error in Twilio stream: {e}")
+        import traceback
+        traceback.print_exc()
         await manager.on_hangup()
         await websocket.close()
 

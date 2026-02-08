@@ -1,0 +1,109 @@
+{
+  "name": "Synthia Superagent",
+  "version": "4.2.0",
+  "type": "docker-compose",
+  "services": {
+    "synthia": {
+      "build": {
+        "context": "./backend",
+        "dockerfile": "Dockerfile"
+      },
+      "ports": ["8000:8000"],
+      "environment": [
+        "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}",
+        "OPENAI_API_KEY=${OPENAI_API_KEY}",
+        "ELEVEN_LABS_API=${ELEVEN_LABS_API}",
+        "TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}",
+        "TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}",
+        "TWILIO_PHONE_NUMBER=${TWILIO_PHONE_NUMBER}",
+        "SUPABASE_URL=${SUPABASE_URL}",
+        "SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}",
+        "COOLIFY_API_TOKEN=${COOLIFY_API_TOKEN}",
+        "ENCRYPTION_KEY=${ENCRYPTION_KEY}",
+        "ENVIRONMENT=production"
+      ],
+      "volumes": [
+        "./backend:/app",
+        "./generated:/app/generated",
+        "./content:/app/content"
+      ],
+      "healthcheck": {
+        "test": ["CMD", "curl", "-f", "http://localhost:8000/health"],
+        "interval": "30s",
+        "timeout": "10s",
+        "retries": 3
+      },
+      "restart": "unless-stopped"
+    },
+    "frontend": {
+      "build": {
+        "context": "./frontend",
+        "dockerfile": "Dockerfile"
+      },
+      "ports": ["5173:5173"],
+      "environment": [
+        "VITE_API_URL=${API_URL}"
+      ],
+      "restart": "unless-stopped"
+    },
+    "redis": {
+      "image": "redis:7-alpine",
+      "ports": ["6379:6379"],
+      "volumes": ["redis-data:/data"],
+      "restart": "unless-stopped"
+    },
+    "celery-worker": {
+      "build": {
+        "context": "./backend",
+        "dockerfile": "Dockerfile"
+      },
+      "command": "celery -A tasks worker --loglevel=info",
+      "environment": [
+        "CELERY_BROKER_URL=redis://redis:6379/0",
+        "CELERY_RESULT_BACKEND=redis://redis:6379/0"
+      ],
+      "depends_on": ["redis"],
+      "restart": "unless-stopped"
+    },
+    "celery-beat": {
+      "build": {
+        "context": "./backend",
+        "dockerfile": "Dockerfile"
+      },
+      "command": "celery -A tasks beat --loglevel=info",
+      "environment": [
+        "CELERY_BROKER_URL=redis://redis:6379/0",
+        "CELERY_RESULT_BACKEND=redis://redis:6379/0"
+      ],
+      "depends_on": ["redis"],
+      "restart": "unless-stopped"
+    }
+  },
+  "volumes": {
+    "redis-data": {}
+  },
+  "domains": [
+    {
+      "service": "synthia",
+      "port": 8000,
+      "path": "/api"
+    },
+    {
+      "service": "frontend",
+      "port": 5173,
+      "path": "/"
+    }
+  ],
+  "env_vars": [
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "ELEVEN_LABS_API",
+    "TWILIO_ACCOUNT_SID",
+    "TWILIO_AUTH_TOKEN",
+    "TWILIO_PHONE_NUMBER",
+    "SUPABASE_URL",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "COOLIFY_API_TOKEN",
+    "ENCRYPTION_KEY"
+  ]
+}

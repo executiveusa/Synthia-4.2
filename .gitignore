@@ -3,12 +3,18 @@ node_modules/
 __pycache__/
 *.pyc
 
-# Environment
+# Environment / Secrets - NEVER COMMIT
 .env
+.env.*
+!.env.example
 .env.local
+.env.production
 .venv/
 venv/
 master.env
+*.env
+secrets/
+*.secret
 
 # Build output
 dist/
@@ -31,3 +37,15 @@ StoryToolkitAI-main/
 
 # Training data (large files)
 training/
+
+# Test files with hardcoded API keys
+backend/test_call.py
+backend/test_llm.py
+
+# SQLite memory database (local data)
+backend/data/synthia_memory.db
+backend/data/synthia_memory.db-wal
+backend/data/synthia_memory.db-shm
+
+# Tunnel URL cache
+lt_url.txt

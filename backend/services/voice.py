@@ -90,10 +90,11 @@ class VoiceService:
     """
     
     def __init__(self):
-        self.elevenlabs_api_key = os.getenv("ELEVEN_LABS_API")
+        self.elevenlabs_api_key = os.getenv("ELEVEN_LABS_API") or os.getenv("ELEVENLABS_API_KEY")
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
         self.base_url = "https://api.elevenlabs.io/v1"
         self.default_language = LanguageCode(os.getenv("DEFAULT_LANGUAGE", "es"))
+        self._local_whisper = None  # Lazy-loaded faster-whisper model
         
     def detect_language(self, text: str) -> LanguageCode:
         """
@@ -158,12 +159,21 @@ class VoiceService:
     
     async def transcribe(self, audio_data: bytes, language: Optional[str] = None) -> str:
         """
-        Transcribe audio to text using OpenAI Whisper.
-        Supports multilingual transcription.
+        Transcribe audio to text.
+        Tries OpenAI Whisper API first, falls back to local faster-whisper.
         """
-        if not self.openai_api_key:
-            raise ValueError("OPENAI_API_KEY not configured")
-        
+        # Try OpenAI Whisper API first
+        if self.openai_api_key:
+            try:
+                return await self._transcribe_openai(audio_data, language)
+            except Exception as e:
+                print(f"OpenAI STT failed ({e}), falling back to local Whisper...")
+
+        # Fall back to local faster-whisper
+        return await self._transcribe_local(audio_data, language)
+
+    async def _transcribe_openai(self, audio_data: bytes, language: Optional[str] = None) -> str:
+        """Transcribe via OpenAI Whisper API."""
         url = "https://api.openai.com/v1/audio/transcriptions"
         
         headers = {
@@ -171,19 +181,63 @@ class VoiceService:
         }
         
         files = {
-            "file": ("audio.mp3", audio_data, "audio/mpeg"),
+            "file": ("audio.wav", audio_data, "audio/wav"),
             "model": (None, "whisper-1"),
         }
         
-        # Add language hint if provided (es, en, hi, sr)
         if language:
             files["language"] = (None, language)
         
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(url, headers=headers, files=files)
             response.raise_for_status()
             data = response.json()
             return data.get("text", "")
+
+    async def _transcribe_local(self, audio_data: bytes, language: Optional[str] = None) -> str:
+        """Transcribe using local faster-whisper model (no API key needed)."""
+        import tempfile
+        import os as _os
+
+        # Lazy-load the model
+        if self._local_whisper is None:
+            try:
+                from faster_whisper import WhisperModel
+                self._local_whisper = WhisperModel(
+                    "base",  # small/fast model, upgrade to "small" or "medium" for better accuracy
+                    device="cpu",
+                    compute_type="int8",
+                )
+                print("Local Whisper model loaded (faster-whisper/base)")
+            except ImportError:
+                raise RuntimeError("No STT available: OpenAI key invalid and faster-whisper not installed")
+
+        # Write audio to temp file (faster-whisper needs a file path)
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                tmp.write(audio_data)
+                tmp_path = tmp.name
+
+            # Run transcription in thread pool to not block event loop
+            loop = asyncio.get_event_loop()
+            segments, info = await loop.run_in_executor(
+                None,
+                lambda: self._local_whisper.transcribe(
+                    tmp_path,
+                    language=language,
+                    beam_size=3,
+                    vad_filter=True,
+                )
+            )
+            # Collect all segments
+            text_parts = []
+            for segment in segments:
+                text_parts.append(segment.text)
+            return " ".join(text_parts).strip()
+        finally:
+            if tmp_path and _os.path.exists(tmp_path):
+                _os.unlink(tmp_path)
     
     async def stream_synthesize(
         self,

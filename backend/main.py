@@ -15,6 +15,7 @@ load_dotenv()
 # Import Synthia modules
 from api import skills_router
 from api.yappyverse import router as yappyverse_router
+from api.superagent import router as superagent_router
 from skills.registry import get_skill, list_skills
 from skills.workflows import get_workflow, list_workflows
 from skills.quality import validate_code, get_quality_summary
@@ -40,6 +41,7 @@ app.add_middleware(
 # Include routers
 app.include_router(skills_router)
 app.include_router(yappyverse_router)
+app.include_router(superagent_router)
 app.include_router(orchestration_router)
 
 # Models
@@ -358,6 +360,20 @@ async def initiate_voice_call(request: VoiceCallRequest):
 async def voice_call_status(request: dict):
     """Twilio call status webhook callback."""
     return {"received": True, "status": request.get("CallStatus", "unknown")}
+
+
+@app.post("/voice/inbound")
+async def voice_inbound_call():
+    """
+    Twilio inbound call webhook.
+    Returns TwiML that connects the caller to Synthia via bidirectional media stream.
+    Set this URL as the Voice webhook on your Twilio phone number.
+    """
+    from fastapi.responses import Response
+    from services.twilio_service import get_twilio_service
+    twilio = get_twilio_service()
+    twiml = twilio.generate_inbound_twiml()
+    return Response(content=twiml, media_type="application/xml")
 
 
 # ═════════════════════════════════════════════════════════════════
